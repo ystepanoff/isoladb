@@ -1,8 +1,7 @@
 """Pytest plugin providing isoladb fixtures."""
 
 import uuid
-from pathlib import Path
-from typing import Any, Callable, Generator, Optional, Union
+from typing import Any, Callable, Generator, Optional
 
 import pytest
 
@@ -33,7 +32,7 @@ class IsolaDBConnection:
         )
 
     def __repr__(self) -> str:
-        return "IsolaDBConnection(dbname={!r}, port={})".format(self.dbname, self.port)
+        return f"IsolaDBConnection(dbname={self.dbname!r}, port={self.port})"
 
 
 def pytest_addoption(parser: Any) -> None:
@@ -115,12 +114,10 @@ def _make_db(
     """Create a database and apply schema/setup. Returns (conn_info, dbname)."""
     from isoladb.database import _apply_setup
 
-    dbname = "isoladb_test_{}".format(uuid.uuid4().hex[:12])
+    dbname = f"isoladb_test_{uuid.uuid4().hex[:12]}"
     server.create_database(dbname)
 
-    url = "postgresql://localhost/{}?host={}&port={}".format(
-        dbname, server.socket_dir, server.port
-    )
+    url = f"postgresql://localhost/{dbname}?host={server.socket_dir}&port={server.port}"
 
     _apply_setup(url, schema, setup)
 

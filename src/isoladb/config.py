@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-
 DEFAULT_PG_VERSION = "17.2.0"
 DEFAULT_CACHE_DIR = os.path.join(Path.home(), ".cache", "isoladb")
 

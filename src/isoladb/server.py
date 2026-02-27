@@ -8,7 +8,6 @@ import socket
 import subprocess
 import tempfile
 import time
-from pathlib import Path
 from typing import Optional
 
 import psycopg
@@ -17,7 +16,7 @@ from psycopg import sql
 from isoladb.binary import get_or_download
 from isoladb.config import IsolaDBConfig
 from isoladb.exceptions import DatabaseError, ServerStartError, ServerStopError
-from isoladb.ramdisk import RamDisk, create_data_directory
+from isoladb.ramdisk import create_data_directory
 
 logger = logging.getLogger("isoladb.server")
 
@@ -198,7 +197,7 @@ class IsolaDBServer:
                     sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name))
                 )
         except psycopg.Error as e:
-            raise DatabaseError("Failed to create database {!r}: {}".format(name, e)) from e
+            raise DatabaseError(f"Failed to create database {name!r}: {e}") from e
 
         logger.debug("Created database %s", name)
 
@@ -235,7 +234,7 @@ class IsolaDBServer:
                     sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(name))
                 )
         except psycopg.Error as e:
-            raise DatabaseError("Failed to drop database {!r}: {}".format(name, e)) from e
+            raise DatabaseError(f"Failed to drop database {name!r}: {e}") from e
 
         logger.debug("Dropped database %s", name)
 
@@ -258,11 +257,11 @@ class IsolaDBServer:
             )
         except subprocess.CalledProcessError as e:
             raise ServerStartError(
-                "initdb failed:\nstdout: {}\nstderr: {}".format(e.stdout, e.stderr)
+                f"initdb failed:\nstdout: {e.stdout}\nstderr: {e.stderr}"
             )
         except FileNotFoundError:
             raise ServerStartError(
-                "initdb not found at {}".format(initdb)
+                f"initdb not found at {initdb}"
             )
 
     def _configure_postgresql(self) -> None:
@@ -281,12 +280,12 @@ class IsolaDBServer:
         with open(str(conf_path), "a") as f:
             f.write("\n# isoladb settings\n")
             for key, value in settings.items():
-                f.write("{} = {}\n".format(key, value))
+                f.write(f"{key} = {value}\n")
 
     def _start_server(self) -> None:
         """Start the PostgreSQL server process."""
         pg_ctl = self._pg_dir / "bin" / "pg_ctl"  # type: ignore[union-attr]
-        server_opts = "-p {} -k {} -h ''".format(self._port, self._socket_dir)
+        server_opts = f"-p {self._port} -k {self._socket_dir} -h ''"
 
         try:
             subprocess.run(
@@ -305,7 +304,7 @@ class IsolaDBServer:
         except subprocess.CalledProcessError as e:
             log_content = self._read_log()
             raise ServerStartError(
-                "pg_ctl start failed:\nstderr: {}\nlog: {}".format(e.stderr, log_content)
+                f"pg_ctl start failed:\nstderr: {e.stderr}\nlog: {log_content}"
             )
 
     def _wait_for_ready(self) -> None:
@@ -331,16 +330,15 @@ class IsolaDBServer:
 
         log_content = self._read_log()
         raise ServerStartError(
-            "PostgreSQL server did not become ready within {} seconds.\nLog:\n{}".format(
-                self._config.startup_timeout, log_content
-            )
+            f"PostgreSQL server did not become ready within "
+            f"{self._config.startup_timeout} seconds.\nLog:\n{log_content}"
         )
 
     def _read_log(self) -> str:
         """Read the PostgreSQL log file contents."""
         if self._log_file and os.path.exists(self._log_file):
             try:
-                with open(self._log_file, "r") as f:
+                with open(self._log_file) as f:
                     return f.read()
             except OSError:
                 return "<could not read log>"

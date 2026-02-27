@@ -2,13 +2,12 @@
 
 import io
 import logging
-import os
 import tarfile
 import zipfile
 from pathlib import Path
 from typing import Optional
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
 
 from isoladb._compat import detect_platform
 from isoladb.config import IsolaDBConfig
@@ -22,17 +21,15 @@ _MAVEN_BASE = "https://repo1.maven.org/maven2/io/zonky/test/postgres"
 
 def _build_download_url(os_name: str, arch: str, version: str) -> str:
     """Build the Maven Central URL for a specific platform binary."""
-    artifact = "embedded-postgres-binaries-{os}-{arch}".format(os=os_name, arch=arch)
+    artifact = f"embedded-postgres-binaries-{os_name}-{arch}"
     return (
-        "{base}/{artifact}/{version}/{artifact}-{version}.jar".format(
-            base=_MAVEN_BASE, artifact=artifact, version=version
-        )
+        f"{_MAVEN_BASE}/{artifact}/{version}/{artifact}-{version}.jar"
     )
 
 
 def _cache_path(config: IsolaDBConfig, os_name: str, arch: str) -> Path:
     """Return the cache directory path for a specific version/platform."""
-    return Path(config.cache_dir) / config.pg_version / "{}-{}".format(os_name, arch)
+    return Path(config.cache_dir) / config.pg_version / f"{os_name}-{arch}"
 
 
 def _is_cached(cache_dir: Path) -> bool:
@@ -50,13 +47,11 @@ def _download_and_extract(url: str, dest: Path) -> None:
         jar_bytes = response.read()
     except HTTPError as e:
         raise BinaryDownloadError(
-            "Failed to download PostgreSQL binary: HTTP {code} from {url}".format(
-                code=e.code, url=url
-            )
+            f"Failed to download PostgreSQL binary: HTTP {e.code} from {url}"
         ) from e
     except URLError as e:
         raise BinaryDownloadError(
-            "Failed to download PostgreSQL binary: {reason}".format(reason=e.reason)
+            f"Failed to download PostgreSQL binary: {e.reason}"
         ) from e
 
     logger.info("Downloaded %d bytes, extracting...", len(jar_bytes))
@@ -80,7 +75,7 @@ def _download_and_extract(url: str, dest: Path) -> None:
             tf.extractall(path=str(dest))
     except tarfile.TarError as e:
         raise BinaryDownloadError(
-            "Failed to extract PostgreSQL tarball: {}".format(e)
+            f"Failed to extract PostgreSQL tarball: {e}"
         ) from e
 
     # The tarball typically extracts with a top-level directory; flatten if needed
