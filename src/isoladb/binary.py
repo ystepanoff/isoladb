@@ -72,7 +72,11 @@ def _download_and_extract(url: str, dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     try:
         with tarfile.open(fileobj=io.BytesIO(txz_data), mode="r:xz") as tf:
-            tf.extractall(path=str(dest))
+            # Use 'data' filter on Python 3.12+ to avoid DeprecationWarning
+            if hasattr(tarfile, "data_filter"):
+                tf.extractall(path=str(dest), filter="data")
+            else:
+                tf.extractall(path=str(dest))
     except tarfile.TarError as e:
         raise BinaryDownloadError(
             f"Failed to extract PostgreSQL tarball: {e}"
