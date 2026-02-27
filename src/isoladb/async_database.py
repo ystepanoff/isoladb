@@ -21,7 +21,7 @@ AsyncSetupFunc = Callable[[str], Coroutine[Any, Any, None]]
 
 def _config_key(config: IsolaDBConfig) -> str:
     """Generate a hashable key for a config to identify shared servers."""
-    return "{}:{}:{}".format(config.pg_version, config.ram, config.ram_size_mb)
+    return f"{config.pg_version}:{config.ram}:{config.ram_size_mb}"
 
 
 class AsyncIsolaDB:
@@ -96,7 +96,7 @@ class AsyncIsolaDB:
                 _shared_servers[key] = server
             self._server = _shared_servers[key]
 
-        self._dbname = "isoladb_test_{}".format(uuid.uuid4().hex[:12])
+        self._dbname = f"isoladb_test_{uuid.uuid4().hex[:12]}"
         await loop.run_in_executor(None, self._server.create_database, self._dbname)
 
         # Apply schema/setup
@@ -124,7 +124,7 @@ class AsyncIsolaDB:
         if self._schema is not None:
             schema_path = Path(self._schema)
             if not schema_path.exists():
-                raise FileNotFoundError("Schema file not found: {}".format(schema_path))
+                raise FileNotFoundError(f"Schema file not found: {schema_path}")
             logger.debug("Applying schema from %s", schema_path)
             # Schema application is synchronous (reads file, executes SQL)
             loop = asyncio.get_event_loop()
@@ -142,9 +142,9 @@ class AsyncIsolaDB:
     @property
     def url(self) -> str:
         """PostgreSQL connection URL for the test database."""
-        return "postgresql://localhost/{}?host={}&port={}".format(
-            self._dbname, self._server.socket_dir, self._server.port  # type: ignore[union-attr]
-        )
+        socket = self._server.socket_dir  # type: ignore[union-attr]
+        port = self._server.port  # type: ignore[union-attr]
+        return f"postgresql://localhost/{self._dbname}?host={socket}&port={port}"
 
     @property
     def dbname(self) -> str:

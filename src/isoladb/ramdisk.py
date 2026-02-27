@@ -33,7 +33,7 @@ class RamDisk:
             _destroy_linux_tmpfs(self.path)
 
     def __repr__(self) -> str:
-        return "RamDisk(path={!r}, device={!r})".format(self.path, self.device)
+        return f"RamDisk(path={self.path!r}, device={self.device!r})"
 
 
 def create_data_directory(
@@ -87,7 +87,7 @@ def _create_linux_tmpfs(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
         subprocess.run(
             [
                 "mount", "-t", "tmpfs",
-                "-o", "size={}m".format(size_mb),
+                "-o", f"size={size_mb}m",
                 "tmpfs",
                 str(mount_point),
             ],
@@ -101,7 +101,7 @@ def _create_linux_tmpfs(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
             subprocess.run(
                 [
                     "sudo", "-n", "mount", "-t", "tmpfs",
-                    "-o", "size={}m".format(size_mb),
+                    "-o", f"size={size_mb}m",
                     "tmpfs",
                     str(mount_point),
                 ],
@@ -112,9 +112,8 @@ def _create_linux_tmpfs(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
         except (subprocess.CalledProcessError, FileNotFoundError):
             shutil.rmtree(str(tmpdir), ignore_errors=True)
             raise RamDiskError(
-                "Failed to mount tmpfs (tried with and without sudo): {}".format(
-                    e.stderr.strip() if e.stderr else str(e)
-                )
+                "Failed to mount tmpfs (tried with and without sudo): "
+                f"{e.stderr.strip() if e.stderr else str(e)}"
             )
 
     logger.info("Created tmpfs at %s (%d MB)", mount_point, size_mb)
@@ -155,7 +154,7 @@ def _create_macos_ramdisk(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
 
     try:
         result = subprocess.run(
-            ["hdiutil", "attach", "-nomount", "ram://{}".format(sectors)],
+            ["hdiutil", "attach", "-nomount", f"ram://{sectors}"],
             check=True,
             capture_output=True,
             text=True,
@@ -163,9 +162,7 @@ def _create_macos_ramdisk(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
         device = result.stdout.strip()
     except subprocess.CalledProcessError as e:
         raise RamDiskError(
-            "Failed to create macOS RAM disk: {}".format(
-                e.stderr.strip() if e.stderr else str(e)
-            )
+            f"Failed to create macOS RAM disk: {e.stderr.strip() if e.stderr else str(e)}"
         )
 
     # Format the RAM disk
@@ -211,9 +208,7 @@ def _create_macos_ramdisk(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
         )
         shutil.rmtree(str(tmpdir), ignore_errors=True)
         raise RamDiskError(
-            "Failed to format macOS RAM disk: {}".format(
-                e.stderr.strip() if e.stderr else str(e)
-            )
+            f"Failed to format macOS RAM disk: {e.stderr.strip() if e.stderr else str(e)}"
         )
 
     logger.info("Created macOS RAM disk at %s (device: %s, %d MB)", data_dir, device, size_mb)

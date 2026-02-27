@@ -1,9 +1,8 @@
 """isoladb — Ephemeral PostgreSQL instances for unit testing."""
 
-from isoladb.database import IsolaDB, shutdown
 from isoladb.async_database import AsyncIsolaDB
-from isoladb.server import IsolaDBServer
 from isoladb.config import IsolaDBConfig
+from isoladb.database import IsolaDB, shutdown
 from isoladb.exceptions import (
     BinaryDownloadError,
     BinaryNotFoundError,
@@ -14,6 +13,7 @@ from isoladb.exceptions import (
     ServerStopError,
     UnsupportedPlatformError,
 )
+from isoladb.server import IsolaDBServer
 
 __version__ = "0.1.0"
 

@@ -24,7 +24,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.8"
-psycopg = ">=3.1"
+psycopg = {version = ">=3.1", extras = ["binary"]}
 
 [tool.poetry.extras]
 pytest = ["pytest"]
@@ -49,6 +49,11 @@ line-length = 99
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that download PG binaries and start a real server",
+]
 
 [tool.mypy]
 python_version = "3.8"

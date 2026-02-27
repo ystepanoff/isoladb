@@ -1,12 +1,9 @@
 """Tests for binary download and caching."""
 
 import io
-import tarfile
 import zipfile
 from pathlib import Path
 from unittest import mock
-
-import pytest
 
 from isoladb.binary import (
     _build_download_url,
@@ -16,7 +13,6 @@ from isoladb.binary import (
     get_or_download,
 )
 from isoladb.config import IsolaDBConfig
-from isoladb.exceptions import BinaryDownloadError
 
 
 def test_build_download_url():

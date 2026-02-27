@@ -1,7 +1,6 @@
 """Tests for async API."""
 
 import asyncio
-import sys
 
 import pytest
 

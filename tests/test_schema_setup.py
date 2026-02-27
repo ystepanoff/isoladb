@@ -1,7 +1,5 @@
 """Tests for schema and setup migration support."""
 
-import os
-import tempfile
 
 import pytest
 
@@ -13,7 +11,8 @@ def test_schema_file(tmp_path):
     schema_file = tmp_path / "schema.sql"
     schema_file.write_text(
         "CREATE TABLE users (id serial PRIMARY KEY, name text NOT NULL);\n"
-        "CREATE TABLE posts (id serial PRIMARY KEY, user_id int REFERENCES users(id), body text);\n"
+        "CREATE TABLE posts "
+        "(id serial PRIMARY KEY, user_id int REFERENCES users(id), body text);\n"
     )
 
     with IsolaDB(schema=str(schema_file)) as db:
@@ -39,7 +38,7 @@ def test_schema_file(tmp_path):
 def test_schema_file_not_found():
     """Missing schema file raises FileNotFoundError."""
     with pytest.raises(FileNotFoundError, match="Schema file not found"):
-        with IsolaDB(schema="/nonexistent/schema.sql") as db:
+        with IsolaDB(schema="/nonexistent/schema.sql"):
             pass
 
 
