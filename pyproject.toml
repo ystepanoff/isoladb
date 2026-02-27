@@ -24,7 +24,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.8"
-psycopg = ">=3.1"
+psycopg = {version = ">=3.1", extras = ["binary"]}
 
 [tool.poetry.extras]
 pytest = ["pytest"]
