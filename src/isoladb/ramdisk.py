@@ -1,6 +1,7 @@
 """RAM disk / tmpfs management for isoladb."""
 
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -83,11 +84,15 @@ def _create_linux_tmpfs(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
     mount_point = tmpdir / "data"
     mount_point.mkdir()
 
+    uid = os.getuid()
+    gid = os.getgid()
+    mount_opts = f"size={size_mb}m,uid={uid},gid={gid},mode=0700"
+
     try:
         subprocess.run(
             [
                 "mount", "-t", "tmpfs",
-                "-o", f"size={size_mb}m",
+                "-o", mount_opts,
                 "tmpfs",
                 str(mount_point),
             ],
@@ -101,7 +106,7 @@ def _create_linux_tmpfs(size_mb: int) -> Tuple[Path, Optional[RamDisk]]:
             subprocess.run(
                 [
                     "sudo", "-n", "mount", "-t", "tmpfs",
-                    "-o", f"size={size_mb}m",
+                    "-o", mount_opts,
                     "tmpfs",
                     str(mount_point),
                 ],

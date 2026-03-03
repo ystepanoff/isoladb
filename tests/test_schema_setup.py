@@ -1,9 +1,11 @@
 """Tests for schema and setup migration support."""
 
-
+import psycopg
 import pytest
 
 from isoladb import IsolaDB
+
+pytestmark = pytest.mark.integration
 
 
 def test_schema_file(tmp_path):
@@ -16,8 +18,7 @@ def test_schema_file(tmp_path):
     )
 
     with IsolaDB(schema=str(schema_file)) as db:
-        conn = db.connect()
-        try:
+        with psycopg.connect(db.url) as conn:
             conn.execute("INSERT INTO users (name) VALUES ('Alice')")
             conn.execute(
                 "INSERT INTO posts (user_id, body) VALUES (1, 'Hello world')"
@@ -31,13 +32,11 @@ def test_schema_file(tmp_path):
             assert result is not None
             assert result[0] == "Alice"
             assert result[1] == "Hello world"
-        finally:
-            conn.close()
 
 
 def test_schema_file_not_found():
     """Missing schema file raises FileNotFoundError."""
-    with pytest.raises(FileNotFoundError, match="Schema file not found"):
+    with pytest.raises(FileNotFoundError, match="Schema path not found"):
         with IsolaDB(schema="/nonexistent/schema.sql"):
             pass
 
@@ -47,8 +46,6 @@ def test_setup_callable():
     tables_created = []
 
     def my_setup(url):
-        import psycopg
-
         with psycopg.connect(url, autocommit=True) as conn:
             conn.execute(
                 "CREATE TABLE migrated_table (id serial PRIMARY KEY, val text)"
@@ -57,15 +54,12 @@ def test_setup_callable():
 
     with IsolaDB(setup=my_setup) as db:
         assert tables_created == ["migrated_table"]
-        conn = db.connect()
-        try:
+        with psycopg.connect(db.url) as conn:
             conn.execute("INSERT INTO migrated_table (val) VALUES ('works')")
             conn.commit()
             result = conn.execute("SELECT val FROM migrated_table").fetchone()
             assert result is not None
             assert result[0] == "works"
-        finally:
-            conn.close()
 
 
 def test_schema_and_setup_together(tmp_path):
@@ -76,19 +70,79 @@ def test_schema_and_setup_together(tmp_path):
     )
 
     def add_data(url):
-        import psycopg
-
         with psycopg.connect(url, autocommit=True) as conn:
             conn.execute("INSERT INTO base_table (name) VALUES ('seeded')")
 
     with IsolaDB(schema=str(schema_file), setup=add_data) as db:
-        conn = db.connect()
-        try:
+        with psycopg.connect(db.url) as conn:
             result = conn.execute("SELECT name FROM base_table").fetchone()
             assert result is not None
             assert result[0] == "seeded"
-        finally:
-            conn.close()
+
+
+def test_schema_directory(tmp_path):
+    """SQL files in a directory are applied in sorted order."""
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "001_users.sql").write_text(
+        "CREATE TABLE users (id serial PRIMARY KEY, name text NOT NULL);\n"
+    )
+    (migrations / "002_posts.sql").write_text(
+        "CREATE TABLE posts "
+        "(id serial PRIMARY KEY, "
+        "user_id int REFERENCES users(id), body text);\n"
+    )
+    (migrations / "003_seed.sql").write_text(
+        "INSERT INTO users (name) VALUES ('Alice');\n"
+        "INSERT INTO posts (user_id, body) VALUES (1, 'First post');\n"
+    )
+
+    with IsolaDB(schema=str(migrations)) as db:
+        with psycopg.connect(db.url) as conn:
+            result = conn.execute(
+                "SELECT u.name, p.body FROM users u "
+                "JOIN posts p ON p.user_id = u.id"
+            ).fetchone()
+            assert result is not None
+            assert result[0] == "Alice"
+            assert result[1] == "First post"
+
+
+def test_schema_directory_ignores_non_sql(tmp_path):
+    """Non-.sql files in the directory are ignored."""
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "001_create.sql").write_text(
+        "CREATE TABLE dir_test (id serial PRIMARY KEY);\n"
+    )
+    (migrations / "README.md").write_text("This is not SQL\n")
+    (migrations / "notes.txt").write_text("Ignore me\n")
+
+    with IsolaDB(schema=str(migrations)) as db:
+        with psycopg.connect(db.url) as conn:
+            conn.execute("INSERT INTO dir_test DEFAULT VALUES")
+            conn.commit()
+            result = conn.execute("SELECT count(*) FROM dir_test").fetchone()
+            assert result[0] == 1
+
+
+def test_schema_directory_ordering(tmp_path):
+    """Files are applied in sorted order so dependencies resolve correctly."""
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    # Write out of order to ensure sorting matters
+    (migrations / "02_insert.sql").write_text(
+        "INSERT INTO ordered_test (val) VALUES ('second');\n"
+    )
+    (migrations / "01_create.sql").write_text(
+        "CREATE TABLE ordered_test (id serial PRIMARY KEY, val text);\n"
+    )
+
+    with IsolaDB(schema=str(migrations)) as db:
+        with psycopg.connect(db.url) as conn:
+            result = conn.execute("SELECT val FROM ordered_test").fetchone()
+            assert result is not None
+            assert result[0] == "second"
 
 
 def test_each_context_gets_fresh_schema(tmp_path):
@@ -99,20 +153,14 @@ def test_each_context_gets_fresh_schema(tmp_path):
     )
 
     with IsolaDB(schema=str(schema_file)) as db1:
-        conn1 = db1.connect()
-        try:
+        with psycopg.connect(db1.url) as conn1:
             conn1.execute("INSERT INTO fresh_test DEFAULT VALUES")
             conn1.commit()
             count1 = conn1.execute("SELECT count(*) FROM fresh_test").fetchone()
             assert count1[0] == 1
-        finally:
-            conn1.close()
 
     with IsolaDB(schema=str(schema_file)) as db2:
-        conn2 = db2.connect()
-        try:
+        with psycopg.connect(db2.url) as conn2:
             # New DB — table exists (from schema) but should be empty
             count2 = conn2.execute("SELECT count(*) FROM fresh_test").fetchone()
             assert count2[0] == 0
-        finally:
-            conn2.close()

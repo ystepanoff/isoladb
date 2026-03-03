@@ -35,15 +35,18 @@ class AsyncIsolaDB:
 
     Examples::
 
-        # Basic usage with asyncpg
+        # Connect with any async PostgreSQL library
         async with AsyncIsolaDB() as db:
+            # asyncpg
             conn = await asyncpg.connect(
                 host=db.host, port=db.port, database=db.dbname
             )
-            await conn.execute("CREATE TABLE test (id serial PRIMARY KEY)")
-            await conn.close()
+            # psycopg v3 async
+            conn = await psycopg.AsyncConnection.connect(db.url)
+            # SQLAlchemy async
+            engine = create_async_engine(db.url)
 
-        # With schema file
+        # With schema file — applied automatically via wire protocol
         async with AsyncIsolaDB(schema="schema.sql") as db:
             conn = await asyncpg.connect(
                 host=db.host, port=db.port, database=db.dbname
@@ -51,7 +54,7 @@ class AsyncIsolaDB:
             await conn.execute("INSERT INTO users (name) VALUES ($1)", "Alice")
             await conn.close()
 
-        # With async setup callable
+        # With async setup callable — receives the connection URL
         async def apply_migrations(url: str) -> None:
             engine = create_async_engine(url)
             async with engine.begin() as conn:
@@ -126,10 +129,13 @@ class AsyncIsolaDB:
             if not schema_path.exists():
                 raise FileNotFoundError(f"Schema file not found: {schema_path}")
             logger.debug("Applying schema from %s", schema_path)
-            # Schema application is synchronous (reads file, executes SQL)
             loop = asyncio.get_event_loop()
             from isoladb.database import _run_schema_file
-            await loop.run_in_executor(None, _run_schema_file, self.url, schema_path)
+            await loop.run_in_executor(
+                None, _run_schema_file,
+                self._server.socket_dir, self._server.port,  # type: ignore[union-attr]
+                self._dbname, schema_path,
+            )
 
         if self._setup is not None:
             logger.debug("Running setup function")
@@ -144,7 +150,7 @@ class AsyncIsolaDB:
         """PostgreSQL connection URL for the test database."""
         socket = self._server.socket_dir  # type: ignore[union-attr]
         port = self._server.port  # type: ignore[union-attr]
-        return f"postgresql://localhost/{self._dbname}?host={socket}&port={port}"
+        return f"postgresql://postgres@localhost/{self._dbname}?host={socket}&port={port}"
 
     @property
     def dbname(self) -> str:
@@ -152,6 +158,11 @@ class AsyncIsolaDB:
         if self._dbname is None:
             raise RuntimeError("AsyncIsolaDB context not entered")
         return self._dbname
+
+    @property
+    def user(self) -> str:
+        """PostgreSQL superuser name."""
+        return "postgres"
 
     @property
     def host(self) -> str:
@@ -163,27 +174,3 @@ class AsyncIsolaDB:
         """Server port number."""
         return self._server.port  # type: ignore[union-attr]
 
-    async def connect(self, **kwargs: Any) -> Any:
-        """Create an asyncpg connection to the test database.
-
-        Requires asyncpg to be installed.
-
-        Args:
-            **kwargs: Additional arguments passed to asyncpg.connect().
-
-        Returns:
-            An asyncpg connection.
-        """
-        try:
-            import asyncpg
-        except ImportError:
-            raise ImportError(
-                "asyncpg is required for AsyncIsolaDB.connect(). "
-                "Install it with: pip install asyncpg"
-            )
-        return await asyncpg.connect(
-            host=self.host,
-            port=self.port,
-            database=self.dbname,
-            **kwargs,
-        )

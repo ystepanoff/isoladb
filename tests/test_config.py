@@ -10,6 +10,7 @@ def test_defaults():
     assert config.ram is False
     assert config.ram_size_mb == 256
     assert config.startup_timeout == 30.0
+    assert config.use_system_pg is True
     assert config.pg_conf == {}
 
 

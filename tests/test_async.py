@@ -2,6 +2,7 @@
 
 import asyncio
 
+import psycopg
 import pytest
 
 from isoladb import AsyncIsolaDB
@@ -24,9 +25,6 @@ def test_async_context_manager_basic():
             assert db.url.startswith("postgresql://")
             assert db.port > 0
 
-            # Use psycopg synchronously via the URL (simplest test)
-            import psycopg
-
             with psycopg.connect(db.url) as conn:
                 conn.execute("CREATE TABLE async_test (id serial PRIMARY KEY, val text)")
                 conn.execute("INSERT INTO async_test (val) VALUES ('async works')")
@@ -43,8 +41,6 @@ def test_async_isolation():
 
     async def run():
         async with AsyncIsolaDB() as db1:
-            import psycopg
-
             with psycopg.connect(db1.url) as conn:
                 conn.execute("CREATE TABLE iso_test (id serial)")
                 conn.commit()
@@ -68,8 +64,6 @@ def test_async_with_schema(tmp_path):
 
     async def run():
         async with AsyncIsolaDB(schema=str(schema_file)) as db:
-            import psycopg
-
             with psycopg.connect(db.url) as conn:
                 conn.execute("INSERT INTO async_schema_test (name) VALUES ('from schema')")
                 conn.commit()
@@ -84,15 +78,11 @@ def test_async_with_sync_setup():
     """AsyncIsolaDB supports synchronous setup callables."""
 
     def my_sync_setup(url):
-        import psycopg
-
         with psycopg.connect(url, autocommit=True) as conn:
             conn.execute("CREATE TABLE sync_setup_test (id serial PRIMARY KEY)")
 
     async def run():
         async with AsyncIsolaDB(setup=my_sync_setup) as db:
-            import psycopg
-
             with psycopg.connect(db.url) as conn:
                 conn.execute("INSERT INTO sync_setup_test DEFAULT VALUES")
                 conn.commit()
@@ -106,17 +96,12 @@ def test_async_with_async_setup():
     """AsyncIsolaDB supports async setup callables."""
 
     async def my_async_setup(url):
-        import psycopg
-
-        # Even in async setup, we can use sync psycopg for schema creation
         with psycopg.connect(url, autocommit=True) as conn:
             conn.execute("CREATE TABLE async_setup_test (id serial PRIMARY KEY, val int)")
             conn.execute("INSERT INTO async_setup_test (val) VALUES (42)")
 
     async def run():
         async with AsyncIsolaDB(setup=my_async_setup) as db:
-            import psycopg
-
             with psycopg.connect(db.url) as conn:
                 result = conn.execute("SELECT val FROM async_setup_test").fetchone()
                 assert result is not None

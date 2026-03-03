@@ -2,6 +2,9 @@
 
 import io
 import logging
+import re
+import shutil
+import subprocess
 import tarfile
 import zipfile
 from pathlib import Path
@@ -120,6 +123,70 @@ def _flatten_if_nested(dest: Path) -> None:
             pass
 
 
+def _get_system_pg_version(pg_ctl: Path) -> Optional[str]:
+    """Run pg_ctl --version and parse the version string.
+
+    Returns the version string (e.g. "14.19") or None on failure.
+    """
+    try:
+        result = subprocess.run(
+            [str(pg_ctl), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        match = re.search(r"(\d+(?:\.\d+)*)", result.stdout)
+        if match:
+            return match.group(1)
+    except (subprocess.SubprocessError, OSError):
+        pass
+    return None
+
+
+def _check_version_compatibility(system_version: str, configured_version: str) -> None:
+    """Log a warning if the system PG major version differs from configured."""
+    system_major = system_version.split(".")[0]
+    configured_major = configured_version.split(".")[0]
+    if system_major != configured_major:
+        logger.warning(
+            "System PostgreSQL major version %s differs from configured %s",
+            system_version,
+            configured_version,
+        )
+
+
+def _detect_system_pg(config: IsolaDBConfig) -> Optional[Path]:
+    """Detect a system-installed PostgreSQL and return its root path.
+
+    Uses shutil.which("pg_ctl") to find the binary, resolves symlinks,
+    and walks up to the installation root. Validates that both pg_ctl
+    and initdb exist in the bin/ directory.
+
+    Returns the installation root Path or None if not found/valid.
+    """
+    pg_ctl_path = shutil.which("pg_ctl")
+    if pg_ctl_path is None:
+        return None
+
+    resolved = Path(pg_ctl_path).resolve()
+    # pg_ctl lives at <root>/bin/pg_ctl, so go up two levels
+    root = resolved.parent.parent
+
+    if not (root / "bin" / "pg_ctl").exists():
+        return None
+    if not (root / "bin" / "initdb").exists():
+        return None
+
+    version = _get_system_pg_version(resolved)
+    if version is not None:
+        _check_version_compatibility(version, config.pg_version)
+        logger.info("Using system PostgreSQL %s at %s", version, root)
+    else:
+        logger.info("Using system PostgreSQL at %s (version unknown)", root)
+
+    return root
+
+
 def get_or_download(config: IsolaDBConfig) -> Path:
     """Get the path to a PostgreSQL installation, downloading if necessary.
 
@@ -133,6 +200,11 @@ def get_or_download(config: IsolaDBConfig) -> Path:
         BinaryDownloadError: If download or extraction fails.
         UnsupportedPlatformError: If the current platform is not supported.
     """
+    if config.use_system_pg:
+        system_pg = _detect_system_pg(config)
+        if system_pg is not None:
+            return system_pg
+
     os_name, arch = detect_platform()
     cache_dir = _cache_path(config, os_name, arch)
 
