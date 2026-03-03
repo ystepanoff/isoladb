@@ -33,7 +33,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install poetry-core
-          pip install -e ".[pytest,sqlalchemy]"
+          pip install -e ".[pytest,psycopg,sqlalchemy]"
           pip install pytest ruff mypy
 
       - name: Lint with ruff
