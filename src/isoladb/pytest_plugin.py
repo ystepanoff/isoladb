@@ -1,10 +1,11 @@
 """Pytest plugin providing isoladb fixtures."""
 
 import uuid
-from typing import Any, Callable, Generator, Optional
+from typing import Any, Callable, Generator, List, Optional
 
 import pytest
 
+from isoladb.binary import get_or_download
 from isoladb.config import IsolaDBConfig
 from isoladb.server import IsolaDBServer
 
@@ -49,6 +50,23 @@ def pytest_addoption(parser: Any) -> None:
         "Path to a SQL file to apply after creating each test database",
         default=None,
     )
+
+
+def pytest_report_header(config: Any) -> List[str]:
+    """Add isoladb binary location to the pytest header."""
+    config_kwargs = {}  # type: dict[str, Any]
+
+    pg_version = config.getini("isoladb_pg_version")
+    if pg_version:
+        config_kwargs["pg_version"] = pg_version
+
+    use_system_pg = config.getini("isoladb_use_system_pg")
+    if not use_system_pg:
+        config_kwargs["use_system_pg"] = False
+
+    db_config = IsolaDBConfig(**config_kwargs)
+    pg_dir = get_or_download(db_config)
+    return [f"isoladb: PostgreSQL at {pg_dir}"]
 
 
 @pytest.fixture(scope="session")
