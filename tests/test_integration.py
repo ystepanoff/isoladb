@@ -77,9 +77,25 @@ def test_pytest_fixture(isoladb):
 
 
 def test_ram_disk():
-    """Start a server with ram=True and verify it works."""
+    """Start a server with ram=True and verify data directory is on a RAM disk."""
+    import sys
+
     with IsolaDB(ram=True) as db:
-        assert db.url.startswith("postgresql://")
+        server = db._server
+
+        # Verify a RamDisk object was created (None means fallback to disk)
+        assert server._ramdisk is not None, "Expected RamDisk, got None (fell back to disk)"
+
+        # Platform-specific device checks
+        if sys.platform == "darwin":
+            assert server._ramdisk.device is not None
+            assert server._ramdisk.device.startswith("/dev/disk")
+        elif sys.platform == "linux":
+            assert server._ramdisk.path is not None
+
+        # Verify the data directory is on the ramdisk and PG is functional
+        assert server._data_dir is not None
+        assert (server._data_dir / "PG_VERSION").exists()
 
         with psycopg.connect(db.url) as conn:
             conn.execute("CREATE TABLE ram_test (id serial PRIMARY KEY, val text)")
