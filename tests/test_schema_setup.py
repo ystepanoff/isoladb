@@ -1,9 +1,11 @@
 """Tests for schema and setup migration support."""
 
-
+import psycopg
 import pytest
 
 from isoladb import IsolaDB
+
+pytestmark = pytest.mark.integration
 
 
 def test_schema_file(tmp_path):
@@ -16,8 +18,7 @@ def test_schema_file(tmp_path):
     )
 
     with IsolaDB(schema=str(schema_file)) as db:
-        conn = db.connect()
-        try:
+        with psycopg.connect(db.url) as conn:
             conn.execute("INSERT INTO users (name) VALUES ('Alice')")
             conn.execute(
                 "INSERT INTO posts (user_id, body) VALUES (1, 'Hello world')"
@@ -31,8 +32,6 @@ def test_schema_file(tmp_path):
             assert result is not None
             assert result[0] == "Alice"
             assert result[1] == "Hello world"
-        finally:
-            conn.close()
 
 
 def test_schema_file_not_found():
@@ -47,8 +46,6 @@ def test_setup_callable():
     tables_created = []
 
     def my_setup(url):
-        import psycopg
-
         with psycopg.connect(url, autocommit=True) as conn:
             conn.execute(
                 "CREATE TABLE migrated_table (id serial PRIMARY KEY, val text)"
@@ -57,15 +54,12 @@ def test_setup_callable():
 
     with IsolaDB(setup=my_setup) as db:
         assert tables_created == ["migrated_table"]
-        conn = db.connect()
-        try:
+        with psycopg.connect(db.url) as conn:
             conn.execute("INSERT INTO migrated_table (val) VALUES ('works')")
             conn.commit()
             result = conn.execute("SELECT val FROM migrated_table").fetchone()
             assert result is not None
             assert result[0] == "works"
-        finally:
-            conn.close()
 
 
 def test_schema_and_setup_together(tmp_path):
@@ -76,19 +70,14 @@ def test_schema_and_setup_together(tmp_path):
     )
 
     def add_data(url):
-        import psycopg
-
         with psycopg.connect(url, autocommit=True) as conn:
             conn.execute("INSERT INTO base_table (name) VALUES ('seeded')")
 
     with IsolaDB(schema=str(schema_file), setup=add_data) as db:
-        conn = db.connect()
-        try:
+        with psycopg.connect(db.url) as conn:
             result = conn.execute("SELECT name FROM base_table").fetchone()
             assert result is not None
             assert result[0] == "seeded"
-        finally:
-            conn.close()
 
 
 def test_each_context_gets_fresh_schema(tmp_path):
@@ -99,20 +88,14 @@ def test_each_context_gets_fresh_schema(tmp_path):
     )
 
     with IsolaDB(schema=str(schema_file)) as db1:
-        conn1 = db1.connect()
-        try:
+        with psycopg.connect(db1.url) as conn1:
             conn1.execute("INSERT INTO fresh_test DEFAULT VALUES")
             conn1.commit()
             count1 = conn1.execute("SELECT count(*) FROM fresh_test").fetchone()
             assert count1[0] == 1
-        finally:
-            conn1.close()
 
     with IsolaDB(schema=str(schema_file)) as db2:
-        conn2 = db2.connect()
-        try:
+        with psycopg.connect(db2.url) as conn2:
             # New DB — table exists (from schema) but should be empty
             count2 = conn2.execute("SELECT count(*) FROM fresh_test").fetchone()
             assert count2[0] == 0
-        finally:
-            conn2.close()

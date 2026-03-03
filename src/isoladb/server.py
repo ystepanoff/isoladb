@@ -10,9 +10,7 @@ import tempfile
 import time
 from typing import Optional
 
-import psycopg
-from psycopg import sql
-
+from isoladb._pg_proto import check_ready, create_database, drop_database
 from isoladb.binary import get_or_download
 from isoladb.config import IsolaDBConfig
 from isoladb.exceptions import DatabaseError, ServerStartError, ServerStopError
@@ -186,20 +184,7 @@ class IsolaDBServer:
         if not self._running:
             raise DatabaseError("Server is not running")
 
-        try:
-            with psycopg.connect(
-                host=self._socket_dir,
-                port=self._port,
-                dbname="postgres",
-                autocommit=True,
-            ) as conn:
-                conn.execute(
-                    sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name))
-                )
-        except psycopg.Error as e:
-            raise DatabaseError(f"Failed to create database {name!r}: {e}") from e
-
-        logger.debug("Created database %s", name)
+        create_database(self._socket_dir, self._port, name)
 
     def drop_database(self, name: str) -> None:
         """Drop a database from this server.
@@ -215,28 +200,7 @@ class IsolaDBServer:
         if not self._running:
             return
 
-        try:
-            with psycopg.connect(
-                host=self._socket_dir,
-                port=self._port,
-                dbname="postgres",
-                autocommit=True,
-            ) as conn:
-                # Terminate connections to the target database
-                conn.execute(
-                    sql.SQL(
-                        "SELECT pg_terminate_backend(pid) "
-                        "FROM pg_stat_activity "
-                        "WHERE datname = {} AND pid <> pg_backend_pid()"
-                    ).format(sql.Literal(name))
-                )
-                conn.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(name))
-                )
-        except psycopg.Error as e:
-            raise DatabaseError(f"Failed to drop database {name!r}: {e}") from e
-
-        logger.debug("Dropped database %s", name)
+        drop_database(self._socket_dir, self._port, name)
 
     def _run_initdb(self) -> None:
         """Initialize the PostgreSQL data directory."""
@@ -249,6 +213,7 @@ class IsolaDBServer:
                     "--no-locale",
                     "--encoding=UTF8",
                     "--auth=trust",
+                    "--username=postgres",
                 ],
                 check=True,
                 capture_output=True,
@@ -310,23 +275,14 @@ class IsolaDBServer:
     def _wait_for_ready(self) -> None:
         """Poll until the server is accepting connections.
 
-        Uses psycopg connection attempts instead of pg_isready,
-        since the zonkyio binary distribution does not include pg_isready.
+        Uses the PostgreSQL wire protocol directly — no client library needed.
         """
         deadline = time.monotonic() + self._config.startup_timeout
 
         while time.monotonic() < deadline:
-            try:
-                with psycopg.connect(
-                    host=self._socket_dir,
-                    port=self._port,
-                    dbname="postgres",
-                    connect_timeout=2,
-                ) as conn:
-                    conn.execute("SELECT 1")
-                    return
-            except psycopg.OperationalError:
-                time.sleep(0.1)
+            if check_ready(self._socket_dir, self._port):
+                return
+            time.sleep(0.1)
 
         log_content = self._read_log()
         raise ServerStartError(

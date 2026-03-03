@@ -1,5 +1,7 @@
-# OMC state
+# OMC & Claude state
 .omc/
+.claude/
+CLAUDE.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

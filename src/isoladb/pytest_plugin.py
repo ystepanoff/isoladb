@@ -12,24 +12,14 @@ from isoladb.server import IsolaDBServer
 class IsolaDBConnection:
     """Connection info for a test database, yielded by the isoladb fixture."""
 
-    __slots__ = ("url", "host", "port", "dbname")
+    __slots__ = ("url", "user", "host", "port", "dbname")
 
     def __init__(self, url: str, host: str, port: int, dbname: str) -> None:
         self.url = url
+        self.user = "postgres"
         self.host = host
         self.port = port
         self.dbname = dbname
-
-    def connect(self, **kwargs: Any) -> Any:
-        """Create a psycopg connection to the test database."""
-        import psycopg
-
-        return psycopg.connect(
-            host=self.host,
-            port=self.port,
-            dbname=self.dbname,
-            **kwargs,
-        )
 
     def __repr__(self) -> str:
         return f"IsolaDBConnection(dbname={self.dbname!r}, port={self.port})"
@@ -117,9 +107,9 @@ def _make_db(
     dbname = f"isoladb_test_{uuid.uuid4().hex[:12]}"
     server.create_database(dbname)
 
-    url = f"postgresql://localhost/{dbname}?host={server.socket_dir}&port={server.port}"
+    url = f"postgresql://postgres@localhost/{dbname}?host={server.socket_dir}&port={server.port}"
 
-    _apply_setup(url, schema, setup)
+    _apply_setup(url, server.socket_dir, server.port, dbname, schema, setup)
 
     conn_info = IsolaDBConnection(
         url=url,

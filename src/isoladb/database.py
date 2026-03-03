@@ -6,8 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
-import psycopg
-
+from isoladb._pg_proto import execute as _pg_execute
 from isoladb.config import IsolaDBConfig
 from isoladb.server import IsolaDBServer
 
@@ -25,21 +24,27 @@ def _config_key(config: IsolaDBConfig) -> str:
     return f"{config.pg_version}:{config.ram}:{config.ram_size_mb}"
 
 
-def _run_schema_file(url: str, schema_path: Path) -> None:
-    """Execute a SQL file against the database."""
+def _run_schema_file(socket_dir: str, port: int, dbname: str, schema_path: Path) -> None:
+    """Execute a SQL file against the database using the PostgreSQL wire protocol."""
     sql_text = schema_path.read_text(encoding="utf-8")
-    with psycopg.connect(url, autocommit=True) as conn:
-        conn.execute(sql_text)
+    _pg_execute(socket_dir, port, sql_text, database=dbname)
 
 
-def _apply_setup(url: str, schema: Optional[Union[str, Path]], setup: Optional[SetupFunc]) -> None:
+def _apply_setup(
+    url: str,
+    socket_dir: str,
+    port: int,
+    dbname: str,
+    schema: Optional[Union[str, Path]],
+    setup: Optional[SetupFunc],
+) -> None:
     """Apply schema file and/or setup callable to a freshly created database."""
     if schema is not None:
         schema_path = Path(schema)
         if not schema_path.exists():
             raise FileNotFoundError(f"Schema file not found: {schema_path}")
         logger.debug("Applying schema from %s", schema_path)
-        _run_schema_file(url, schema_path)
+        _run_schema_file(socket_dir, port, dbname, schema_path)
 
     if setup is not None:
         logger.debug("Running setup function")
@@ -54,14 +59,20 @@ class IsolaDB:
 
     Examples::
 
-        # Basic usage
+        # Connect with any PostgreSQL library you prefer
         with IsolaDB() as db:
+            # psycopg v3
             conn = psycopg.connect(db.url)
-            conn.execute("CREATE TABLE test (id serial PRIMARY KEY)")
+            # psycopg2
+            conn = psycopg2.connect(host=db.host, port=db.port, dbname=db.dbname)
+            # asyncpg
+            conn = await asyncpg.connect(host=db.host, port=db.port, database=db.dbname)
+            # SQLAlchemy
+            engine = create_engine(db.url)
 
         # With schema file — applied automatically after DB creation
         with IsolaDB(schema="schema.sql") as db:
-            conn = db.connect()
+            conn = psycopg.connect(db.url)
             conn.execute("INSERT INTO users (name) VALUES ('Alice')")
 
         # With setup callable — receives the connection URL
@@ -73,8 +84,7 @@ class IsolaDB:
             command.upgrade(cfg, "head")
 
         with IsolaDB(setup=apply_migrations) as db:
-            conn = db.connect()
-            # tables from migrations are ready
+            engine = create_engine(db.url)
     """
 
     def __init__(
@@ -108,7 +118,10 @@ class IsolaDB:
 
         self._dbname = f"isoladb_test_{uuid.uuid4().hex[:12]}"
         self._server.create_database(self._dbname)
-        _apply_setup(self.url, self._schema, self._setup)
+        _apply_setup(
+            self.url, self._server.socket_dir, self._server.port,
+            self._dbname, self._schema, self._setup,
+        )
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -123,7 +136,7 @@ class IsolaDB:
         """PostgreSQL connection URL for the test database."""
         socket = self._server.socket_dir  # type: ignore[union-attr]
         port = self._server.port  # type: ignore[union-attr]
-        return f"postgresql://localhost/{self._dbname}?host={socket}&port={port}"
+        return f"postgresql://postgres@localhost/{self._dbname}?host={socket}&port={port}"
 
     @property
     def dbname(self) -> str:
@@ -131,6 +144,11 @@ class IsolaDB:
         if self._dbname is None:
             raise RuntimeError("IsolaDB context not entered")
         return self._dbname
+
+    @property
+    def user(self) -> str:
+        """PostgreSQL superuser name."""
+        return "postgres"
 
     @property
     def host(self) -> str:
@@ -141,23 +159,6 @@ class IsolaDB:
     def port(self) -> int:
         """Server port number."""
         return self._server.port  # type: ignore[union-attr]
-
-    def connect(self, **kwargs: Any) -> "psycopg.Connection[Any]":
-        """Create a psycopg connection to the test database.
-
-        Args:
-            **kwargs: Additional arguments passed to psycopg.connect().
-
-        Returns:
-            A psycopg connection.
-        """
-        return psycopg.connect(
-            host=self.host,
-            port=self.port,
-            dbname=self.dbname,
-            **kwargs,
-        )
-
 
 def shutdown() -> None:
     """Explicitly stop all shared servers.
