@@ -84,7 +84,9 @@ def test_ram_disk():
         server = db._server
 
         # Verify a RamDisk object was created (None means fallback to disk)
-        assert server._ramdisk is not None, "Expected RamDisk, got None (fell back to disk)"
+        assert server._ramdisk is not None, (
+            "Expected RamDisk, got None (fell back to disk)"
+        )
 
         # Platform-specific device checks
         if sys.platform == "darwin":
