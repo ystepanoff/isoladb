@@ -74,3 +74,17 @@ def test_pytest_fixture(isoladb):
         result = conn.execute("SELECT val FROM fixture_test").fetchone()
         assert result is not None
         assert result[0] == 42
+
+
+def test_ram_disk():
+    """Start a server with ram=True and verify it works."""
+    with IsolaDB(ram=True) as db:
+        assert db.url.startswith("postgresql://")
+
+        with psycopg.connect(db.url) as conn:
+            conn.execute("CREATE TABLE ram_test (id serial PRIMARY KEY, val text)")
+            conn.execute("INSERT INTO ram_test (val) VALUES ('ram')")
+            conn.commit()
+            result = conn.execute("SELECT val FROM ram_test").fetchone()
+            assert result is not None
+            assert result[0] == "ram"
