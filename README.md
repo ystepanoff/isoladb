@@ -94,7 +94,24 @@ with IsolaDB(schema="schema.sql") as db:
         conn.execute("INSERT INTO users (name) VALUES ('Alice')")
 ```
 
-Or use a setup callable for programmatic initialization (e.g., Alembic migrations):
+Or point to a directory of `.sql` files — they are sorted by filename and applied in order:
+
+```
+migrations/
+  001_create_users.sql
+  002_create_posts.sql
+  003_seed_data.sql
+```
+
+```python
+with IsolaDB(schema="migrations/") as db:
+    # All .sql files applied in sorted order
+    ...
+```
+
+Non-`.sql` files in the directory are ignored.
+
+For programmatic initialization (e.g., Alembic migrations), use a setup callable:
 
 ```python
 def apply_migrations(url):
@@ -157,7 +174,7 @@ All options can be passed to `IsolaDB()` / `AsyncIsolaDB()`:
 | `ram` | `False` | Use RAM disk for the data directory |
 | `ram_size_mb` | `256` | RAM disk size in megabytes |
 | `use_system_pg` | `True` | Prefer system PostgreSQL over downloading |
-| `schema` | `None` | Path to a SQL file to apply after DB creation |
+| `schema` | `None` | Path to a SQL file or directory of `.sql` files |
 | `setup` | `None` | Callable receiving the connection URL for custom setup |
 | `cache_dir` | `~/.cache/isoladb` | Directory for cached PostgreSQL binaries |
 | `startup_timeout` | `30.0` | Seconds to wait for the server to start |

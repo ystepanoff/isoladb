@@ -38,13 +38,21 @@ def _apply_setup(
     schema: Optional[Union[str, Path]],
     setup: Optional[SetupFunc],
 ) -> None:
-    """Apply schema file and/or setup callable to a freshly created database."""
+    """Apply schema file/directory and/or setup callable to a freshly created database."""
     if schema is not None:
         schema_path = Path(schema)
         if not schema_path.exists():
-            raise FileNotFoundError(f"Schema file not found: {schema_path}")
-        logger.debug("Applying schema from %s", schema_path)
-        _run_schema_file(socket_dir, port, dbname, schema_path)
+            raise FileNotFoundError(f"Schema path not found: {schema_path}")
+        if schema_path.is_dir():
+            sql_files = sorted(schema_path.glob("*.sql"))
+            if not sql_files:
+                logger.warning("No .sql files found in %s", schema_path)
+            for sql_file in sql_files:
+                logger.debug("Applying schema from %s", sql_file)
+                _run_schema_file(socket_dir, port, dbname, sql_file)
+        else:
+            logger.debug("Applying schema from %s", schema_path)
+            _run_schema_file(socket_dir, port, dbname, schema_path)
 
     if setup is not None:
         logger.debug("Running setup function")
