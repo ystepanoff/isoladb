@@ -19,6 +19,7 @@ class IsolaDBConfig:
         ram: If True, force tmpfs (Linux) or RAM disk (macOS) for the data directory.
         ram_size_mb: Size of the RAM disk in megabytes (only used when ram=True).
         startup_timeout: Seconds to wait for PostgreSQL server to become ready.
+        use_system_pg: If True, use system-installed PostgreSQL when available.
         pg_conf: Extra postgresql.conf settings as key-value pairs.
     """
 
@@ -27,5 +28,6 @@ class IsolaDBConfig:
     ram: bool = False
     ram_size_mb: int = 256
     startup_timeout: float = 30.0
+    use_system_pg: bool = True
     pg_conf: dict = field(default_factory=dict)  # type: ignore[type-arg]
     _data_dir: Optional[str] = field(default=None, repr=False)

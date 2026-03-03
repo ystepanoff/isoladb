@@ -39,6 +39,12 @@ def pytest_addoption(parser: Any) -> None:
         default=False,
     )
     parser.addini(
+        "isoladb_use_system_pg",
+        "Use system PostgreSQL if available (default: true)",
+        type="bool",
+        default=True,
+    )
+    parser.addini(
         "isoladb_schema",
         "Path to a SQL file to apply after creating each test database",
         default=None,
@@ -60,6 +66,10 @@ def isoladb_server(request: pytest.FixtureRequest) -> Generator[IsolaDBServer, N
     ram = request.config.getini("isoladb_ram")  # type: Optional[bool]
     if ram:
         config_kwargs["ram"] = True
+
+    use_system_pg = request.config.getini("isoladb_use_system_pg")
+    if not use_system_pg:
+        config_kwargs["use_system_pg"] = False
 
     config = IsolaDBConfig(**config_kwargs)
     server = IsolaDBServer(config)
