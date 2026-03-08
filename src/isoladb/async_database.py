@@ -1,5 +1,6 @@
 """Async public API — AsyncIsolaDB context manager."""
 
+import atexit
 import logging
 import threading
 import uuid
@@ -13,6 +14,20 @@ logger = logging.getLogger("isoladb.async_database")
 
 _shared_servers = {}  # type: dict[str, IsolaDBServer]
 _lock = threading.Lock()
+
+
+def _async_shutdown() -> None:
+    """Stop all async shared servers. Called via atexit."""
+    with _lock:
+        for server in _shared_servers.values():
+            try:
+                server.stop()
+            except Exception:
+                pass
+        _shared_servers.clear()
+
+
+atexit.register(_async_shutdown)
 
 # Type aliases for setup callables
 SyncSetupFunc = Callable[[str], None]
