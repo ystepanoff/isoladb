@@ -8,7 +8,6 @@ Skip with: pytest -m "not integration"
 
 import errno
 import os
-import signal
 
 import psycopg
 import pytest
