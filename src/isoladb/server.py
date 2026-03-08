@@ -4,6 +4,7 @@ import atexit
 import logging
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
@@ -126,10 +127,8 @@ class IsolaDBServer:
         if not self._running:
             return
 
-        self._running = False
-
-        # Stop the server
         pg_ctl = self._pg_dir / "bin" / "pg_ctl"  # type: ignore[union-attr]
+        stopped = False
         try:
             subprocess.run(
                 [
@@ -145,6 +144,7 @@ class IsolaDBServer:
                 timeout=30,
             )
             logger.info("PostgreSQL server stopped")
+            stopped = True
         except subprocess.CalledProcessError as e:
             logger.warning("pg_ctl stop failed: %s", e.stderr)
             # Try immediate shutdown
@@ -155,16 +155,24 @@ class IsolaDBServer:
                         "-D", str(self._data_dir),
                         "stop",
                         "-m", "immediate",
+                        "-w",
                     ],
+                    check=True,
                     capture_output=True,
                     text=True,
                     timeout=10,
                 )
+                stopped = True
             except Exception:
                 logger.error("Failed to stop PostgreSQL server even with immediate mode")
         except subprocess.TimeoutExpired:
             raise ServerStopError("PostgreSQL server stop timed out")
 
+        if not stopped:
+            # (Yegor) Last resort: kill the postmaster process directly by PID.
+            self._kill_postmaster()
+
+        self._running = False
         self._cleanup()
 
         # Deregister atexit
@@ -322,9 +330,25 @@ class IsolaDBServer:
             shutil.rmtree(self._tmpdir, ignore_errors=True)
             self._tmpdir = None
 
+    def _kill_postmaster(self) -> None:
+        """Kill the postmaster process via SIGKILL using postmaster.pid."""
+        if self._data_dir is None:
+            return
+        pid_file = self._data_dir / "postmaster.pid"
+        if not pid_file.exists():
+            return
+        try:
+            with open(str(pid_file)) as f:
+                pid = int(f.readline().strip())
+            os.kill(pid, signal.SIGKILL)
+            logger.warning("Killed PostgreSQL postmaster (pid=%d) with SIGKILL", pid)
+        except Exception:
+            logger.error("Failed to kill postmaster via PID file", exc_info=True)
+
     def _atexit_stop(self) -> None:
         """Atexit handler to ensure the server is stopped."""
         try:
             self.stop()
         except Exception:
-            pass
+            # stop() raised (e.g. ServerStopError from timeout) — try a hard kill.
+            self._kill_postmaster()

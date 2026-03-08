@@ -6,10 +6,14 @@ They are slow on first run (binary download) but fast after caching.
 Skip with: pytest -m "not integration"
 """
 
+import errno
+import os
+
 import psycopg
 import pytest
 
 from isoladb import IsolaDB
+from isoladb.server import IsolaDBServer
 
 pytestmark = pytest.mark.integration
 
@@ -74,6 +78,30 @@ def test_pytest_fixture(isoladb):
         result = conn.execute("SELECT val FROM fixture_test").fetchone()
         assert result is not None
         assert result[0] == 42
+
+
+def test_no_orphan_process_after_stop():
+    """Server.stop() must leave no postgres process behind."""
+    server = IsolaDBServer()
+    server.start()
+
+    # Read the postmaster PID while the server is still up.
+    pid_file = server._data_dir / "postmaster.pid"
+    assert pid_file.exists(), "postmaster.pid not found after start"
+    with open(str(pid_file)) as f:
+        pid = int(f.readline().strip())
+
+    # Confirm the process is alive before we stop it.
+    os.kill(pid, 0)
+
+    server.stop()
+
+    # The process must be gone now.
+    try:
+        os.kill(pid, 0)
+        pytest.fail(f"postgres process (pid={pid}) is still running after stop()")
+    except OSError as e:
+        assert e.errno == errno.ESRCH, f"unexpected OSError: {e}"
 
 
 def test_ram_disk():

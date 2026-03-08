@@ -1,5 +1,6 @@
 """Main public API — IsolaDB context manager."""
 
+import atexit
 import logging
 import threading
 import uuid
@@ -181,3 +182,6 @@ def shutdown() -> None:
             except Exception:
                 pass
         _shared_servers.clear()
+
+
+atexit.register(shutdown)
