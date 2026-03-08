@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "isoladb"
-version = "0.1.0"
+version = "0.1.1"
 description = "Ephemeral PostgreSQL instances for unit testing"
 readme = "README.md"
 license = "MIT"
