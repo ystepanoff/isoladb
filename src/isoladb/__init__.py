@@ -15,7 +15,7 @@ from isoladb.exceptions import (
 )
 from isoladb.server import IsolaDBServer
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "IsolaDB",
