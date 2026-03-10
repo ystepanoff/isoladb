@@ -111,7 +111,7 @@ with IsolaDB(schema="migrations/") as db:
 
 Non-`.sql` files in the directory are ignored.
 
-For programmatic initialization (e.g., Alembic migrations), use a setup callable:
+For programmatic initialisation (e.g., Alembic migrations), use a setup callable:
 
 ```python
 def apply_migrations(url):
