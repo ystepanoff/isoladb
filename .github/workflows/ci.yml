@@ -13,7 +13,18 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        experimental: [false]
+        # Python 3.15 is pre-release until ~October 2026: test it, but
+        # don't let it block the build (wheels for deps may also lag).
+        include:
+          - os: ubuntu-latest
+            python-version: "3.15"
+            experimental: true
+          - os: macos-latest
+            python-version: "3.15"
+            experimental: true
+    continue-on-error: ${{ matrix.experimental }}
 
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +33,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          allow-prereleases: ${{ matrix.experimental }}
 
       - name: Cache isoladb PG binaries
         uses: actions/cache@v4
@@ -39,10 +51,10 @@ jobs:
       - name: Lint with ruff
         run: ruff check src/ tests/
 
-      # Only on the newest Python: older runners resolve an older mypy with
-      # different behavior, and modern mypy cannot target Python 3.8 anyway.
+      # Only on the newest stable Python: older runners resolve an older mypy
+      # with different behavior, and modern mypy cannot target Python 3.8 anyway.
       - name: Type check with mypy
-        if: matrix.python-version == '3.13'
+        if: matrix.python-version == '3.14'
         run: mypy src/isoladb/ --ignore-missing-imports
 
       - name: Run tests

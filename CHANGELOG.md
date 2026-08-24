@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- CI: Python 3.14 added to the test matrix (with classifier); Python 3.15
+  pre-release tested in a non-blocking experimental lane.
+
 ### Fixed
 
 - **Event-loop deadlock in `AsyncIsolaDB`**: `__aenter__` held the shared-server
