@@ -39,9 +39,11 @@ jobs:
       - name: Lint with ruff
         run: ruff check src/ tests/
 
+      # Only on the newest Python: older runners resolve an older mypy with
+      # different behavior, and modern mypy cannot target Python 3.8 anyway.
       - name: Type check with mypy
+        if: matrix.python-version == '3.13'
         run: mypy src/isoladb/ --ignore-missing-imports
-        continue-on-error: true
 
       - name: Run tests
         run: pytest tests/ -v

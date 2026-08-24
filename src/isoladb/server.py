@@ -9,13 +9,14 @@ import socket
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 from typing import Optional
 
 from isoladb._pg_proto import check_ready, create_database, drop_database
 from isoladb.binary import get_or_download
 from isoladb.config import IsolaDBConfig
 from isoladb.exceptions import DatabaseError, ServerStartError, ServerStopError
-from isoladb.ramdisk import create_data_directory
+from isoladb.ramdisk import RamDisk, create_data_directory
 
 logger = logging.getLogger("isoladb.server")
 
@@ -24,7 +25,7 @@ def _find_free_port() -> int:
     """Find an available TCP port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+        return int(s.getsockname()[1])
 
 
 class IsolaDBServer:
@@ -36,13 +37,13 @@ class IsolaDBServer:
 
     def __init__(self, config: Optional[IsolaDBConfig] = None) -> None:
         self._config = config or IsolaDBConfig()
-        self._pg_dir = None  # type: Optional[Path]
-        self._data_dir = None  # type: Optional[Path]
-        self._socket_dir = None  # type: Optional[str]
+        self._pg_dir: Optional[Path] = None
+        self._data_dir: Optional[Path] = None
+        self._socket_dir: Optional[str] = None
         self._port = 0
-        self._log_file = None  # type: Optional[str]
-        self._ramdisk = None  # type: Optional[RamDisk]
-        self._tmpdir = None  # type: Optional[str]
+        self._log_file: Optional[str] = None
+        self._ramdisk: Optional[RamDisk] = None
+        self._tmpdir: Optional[str] = None
         self._running = False
         self._atexit_registered = False
 
@@ -127,7 +128,7 @@ class IsolaDBServer:
         if not self._running:
             return
 
-        pg_ctl = self._pg_dir / "bin" / "pg_ctl"  # type: ignore[union-attr]
+        pg_ctl = self._pg_dir / "bin" / "pg_ctl"  # type: ignore[operator]
         stopped = False
         try:
             subprocess.run(
@@ -192,7 +193,7 @@ class IsolaDBServer:
         if not self._running:
             raise DatabaseError("Server is not running")
 
-        create_database(self._socket_dir, self._port, name)
+        create_database(self.socket_dir, self._port, name)
 
     def drop_database(self, name: str) -> None:
         """Drop a database from this server.
@@ -208,11 +209,11 @@ class IsolaDBServer:
         if not self._running:
             return
 
-        drop_database(self._socket_dir, self._port, name)
+        drop_database(self.socket_dir, self._port, name)
 
     def _run_initdb(self) -> None:
         """Initialize the PostgreSQL data directory."""
-        initdb = self._pg_dir / "bin" / "initdb"  # type: ignore[union-attr]
+        initdb = self._pg_dir / "bin" / "initdb"  # type: ignore[operator]
         try:
             subprocess.run(
                 [
@@ -239,7 +240,7 @@ class IsolaDBServer:
 
     def _configure_postgresql(self) -> None:
         """Write performance-optimized postgresql.conf settings."""
-        conf_path = self._data_dir / "postgresql.conf"  # type: ignore[union-attr]
+        conf_path = self._data_dir / "postgresql.conf"  # type: ignore[operator]
         settings = {
             "fsync": "off",
             "synchronous_commit": "off",
@@ -257,7 +258,7 @@ class IsolaDBServer:
 
     def _start_server(self) -> None:
         """Start the PostgreSQL server process."""
-        pg_ctl = self._pg_dir / "bin" / "pg_ctl"  # type: ignore[union-attr]
+        pg_ctl = self._pg_dir / "bin" / "pg_ctl"  # type: ignore[operator]
         server_opts = f"-p {self._port} -k {self._socket_dir} -h ''"
 
         try:
@@ -288,7 +289,7 @@ class IsolaDBServer:
         deadline = time.monotonic() + self._config.startup_timeout
 
         while time.monotonic() < deadline:
-            if check_ready(self._socket_dir, self._port):
+            if check_ready(self.socket_dir, self._port):
                 return
             time.sleep(0.1)
 
@@ -349,6 +350,6 @@ class IsolaDBServer:
         """Atexit handler to ensure the server is stopped."""
         try:
             self.stop()
-        except Exception:
-            # stop() raised (e.g. ServerStopError from timeout) — try a hard kill.
+        except BaseException:
+            # Catches both normal exceptions and KeyboardInterrupt (double Ctrl-C).
             self._kill_postmaster()

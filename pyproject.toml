@@ -59,5 +59,17 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.8"
+# mypy >= 1.9 cannot target 3.8; runtime support remains 3.8.
+python_version = "3.9"
 strict = true
+
+# Don't type-check into installed pytest: its source uses syntax newer than
+# our python_version target, which aborts the whole run.
+[[tool.mypy.overrides]]
+module = ["pytest", "_pytest.*", "pluggy"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = "isoladb.pytest_plugin"
+# pytest decorators are untyped once pytest imports are skipped above.
+disallow_untyped_decorators = false

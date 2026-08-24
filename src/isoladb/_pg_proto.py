@@ -14,6 +14,7 @@ import logging
 import socket
 import struct
 from pathlib import Path
+from typing import Tuple
 
 from isoladb.exceptions import DatabaseError
 
@@ -53,7 +54,7 @@ def _encode_terminate() -> bytes:
     return b"X" + struct.pack("!I", 4)
 
 
-def _read_message(sock: socket.socket) -> tuple:
+def _read_message(sock: socket.socket) -> Tuple[int, bytes]:
     """Read a single message from the server. Returns (type_byte, payload)."""
     header = _recv_exact(sock, 5)
     msg_type = header[0]

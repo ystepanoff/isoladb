@@ -74,6 +74,27 @@ def test_async_with_schema(tmp_path):
     asyncio.run(run())
 
 
+def test_async_with_schema_directory(tmp_path):
+    """AsyncIsolaDB applies directories of .sql files in sorted order."""
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "001_users.sql").write_text(
+        "CREATE TABLE async_dir_users (id serial PRIMARY KEY, name text NOT NULL);\n"
+    )
+    (migrations / "002_seed.sql").write_text(
+        "INSERT INTO async_dir_users (name) VALUES ('Alice');\n"
+    )
+
+    async def run():
+        async with AsyncIsolaDB(schema=str(migrations)) as db:
+            with psycopg.connect(db.url) as conn:
+                result = conn.execute("SELECT name FROM async_dir_users").fetchone()
+                assert result is not None
+                assert result[0] == "Alice"
+
+    asyncio.run(run())
+
+
 def test_async_with_sync_setup():
     """AsyncIsolaDB supports synchronous setup callables."""
 

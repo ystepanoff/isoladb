@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Event-loop deadlock in `AsyncIsolaDB`**: `__aenter__` held the shared-server
+  `threading.Lock` across an `await`, freezing the event loop whenever two async
+  contexts were entered concurrently. The lock is now only acquired inside the
+  executor thread (`_get_or_start_server`).
+- **pytest startup no longer downloads binaries or crashes**: `pytest_report_header`
+  called `get_or_download()` at every pytest session start, downloading ~50MB when no
+  system PostgreSQL was present (even for runs that never use isoladb) and aborting
+  pytest entirely on unsupported platforms. It now uses the new `binary.find_local()`
+  (system installation or cache only, never a download) and swallows all errors.
+- **Shared-server cache key ignored config fields**: servers were shared across
+  contexts that differed in `pg_conf`, `cache_dir`, or `use_system_pg`, silently
+  dropping the second context's settings. The key now covers all behaviour-affecting
+  fields.
+- **`AsyncIsolaDB` schema directories**: `schema=` pointing at a directory of `.sql`
+  files raised `IsADirectoryError` in the async API (sync only). Both APIs now share
+  the same schema application logic.
+- **mypy gate restored**: `python_version = "3.8"` is rejected by modern mypy, so the
+  type check had been failing at config load (masked by `continue-on-error` in CI).
+  Target bumped to 3.9, all strict-mode errors fixed (including `Path`/`RamDisk`
+  referenced but not imported in `server.py`), and the CI step is now blocking on
+  the newest matrix Python.
+
 ## [0.1.1] - 2026-03-08
 
 ### Fixed

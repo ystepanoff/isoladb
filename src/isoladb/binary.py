@@ -187,17 +187,20 @@ def _detect_system_pg(config: IsolaDBConfig) -> Optional[Path]:
     return root
 
 
-def get_or_download(config: IsolaDBConfig) -> Path:
-    """Get the path to a PostgreSQL installation, downloading if necessary.
+def find_local(config: IsolaDBConfig) -> Optional[Path]:
+    """Find a usable PostgreSQL installation without downloading anything.
+
+    Checks the system installation (when ``use_system_pg`` is enabled) and
+    the local binary cache.
 
     Args:
         config: IsolaDB configuration with version and cache settings.
 
     Returns:
-        Path to the PostgreSQL installation directory (parent of bin/).
+        Path to the installation directory, or None if a download would
+        be required.
 
     Raises:
-        BinaryDownloadError: If download or extraction fails.
         UnsupportedPlatformError: If the current platform is not supported.
     """
     if config.use_system_pg:
@@ -212,6 +215,28 @@ def get_or_download(config: IsolaDBConfig) -> Path:
         logger.debug("Using cached PostgreSQL binary at %s", cache_dir)
         return cache_dir
 
+    return None
+
+
+def get_or_download(config: IsolaDBConfig) -> Path:
+    """Get the path to a PostgreSQL installation, downloading if necessary.
+
+    Args:
+        config: IsolaDB configuration with version and cache settings.
+
+    Returns:
+        Path to the PostgreSQL installation directory (parent of bin/).
+
+    Raises:
+        BinaryDownloadError: If download or extraction fails.
+        UnsupportedPlatformError: If the current platform is not supported.
+    """
+    local = find_local(config)
+    if local is not None:
+        return local
+
+    os_name, arch = detect_platform()
+    cache_dir = _cache_path(config, os_name, arch)
     url = _build_download_url(os_name, arch, config.pg_version)
     _download_and_extract(url, cache_dir)
 
