@@ -2,6 +2,7 @@
 .omc/
 .claude/
 CLAUDE.md
+AGENTS.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

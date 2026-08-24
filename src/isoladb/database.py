@@ -21,8 +21,17 @@ SetupFunc = Callable[[str], None]
 
 
 def _config_key(config: IsolaDBConfig) -> str:
-    """Generate a hashable key for a config to identify shared servers."""
-    return f"{config.pg_version}:{config.ram}:{config.ram_size_mb}"
+    """Generate a hashable key for a config to identify shared servers.
+
+    Covers every field that affects server behaviour; startup_timeout is
+    deliberately excluded (it only affects how long start() waits).
+    Keep in sync with isoladb.async_database._config_key.
+    """
+    pg_conf = ",".join(f"{k}={v}" for k, v in sorted(config.pg_conf.items()))
+    return (
+        f"{config.pg_version}:{config.cache_dir}:{config.ram}:"
+        f"{config.ram_size_mb}:{config.use_system_pg}:{pg_conf}"
+    )
 
 
 def _run_schema_file(socket_dir: str, port: int, dbname: str, schema_path: Path) -> None:
@@ -179,7 +188,7 @@ def shutdown() -> None:
         for server in _shared_servers.values():
             try:
                 server.stop()
-            except Exception:
+            except BaseException:
                 pass
         _shared_servers.clear()
 

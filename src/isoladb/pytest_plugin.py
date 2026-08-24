@@ -1,11 +1,11 @@
 """Pytest plugin providing isoladb fixtures."""
 
 import uuid
-from typing import Any, Callable, Generator, List, Optional
+from typing import Any, Callable, Generator, List, Optional, Tuple
 
 import pytest
 
-from isoladb.binary import get_or_download
+from isoladb.binary import find_local
 from isoladb.config import IsolaDBConfig
 from isoladb.server import IsolaDBServer
 
@@ -53,7 +53,12 @@ def pytest_addoption(parser: Any) -> None:
 
 
 def pytest_report_header(config: Any) -> List[str]:
-    """Add isoladb binary location to the pytest header."""
+    """Add isoladb binary location to the pytest header.
+
+    Must never download binaries or raise: this hook runs at every pytest
+    startup in any project that merely has isoladb installed, possibly on
+    an unsupported platform, with no network, or without using isoladb at all.
+    """
     config_kwargs = {}  # type: dict[str, Any]
 
     pg_version = config.getini("isoladb_pg_version")
@@ -64,9 +69,15 @@ def pytest_report_header(config: Any) -> List[str]:
     if not use_system_pg:
         config_kwargs["use_system_pg"] = False
 
-    db_config = IsolaDBConfig(**config_kwargs)
-    pg_dir = get_or_download(db_config)
-    return [f"isoladb: PostgreSQL at {pg_dir}"]
+    try:
+        db_config = IsolaDBConfig(**config_kwargs)
+        pg_dir = find_local(db_config)
+    except Exception:
+        return []
+
+    if pg_dir is not None:
+        return [f"isoladb: PostgreSQL at {pg_dir}"]
+    return [f"isoladb: PostgreSQL {db_config.pg_version} (will download on first use)"]
 
 
 @pytest.fixture(scope="session")
@@ -128,7 +139,7 @@ def _make_db(
     server: IsolaDBServer,
     schema: Optional[str],
     setup: Optional[Callable[[str], None]],
-) -> tuple:
+) -> Tuple[IsolaDBConnection, str]:
     """Create a database and apply schema/setup. Returns (conn_info, dbname)."""
     from isoladb.database import _apply_setup
 
